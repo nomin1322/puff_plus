@@ -1,0 +1,574 @@
+
+Kssrrr… mmh. Yes. I’ll give you the whole runway, from “add Rhythm” to “brains” to “guardrails + explainability” to “evaluation + packaging”, step-by-step, in the order that keeps your project from turning into spaghetti soup.
+
+I’m going to assume your current `main.py` already has `precision_gap` + `timing_gate`, plus `run["death_family"]` logging, and Day 3 `analyze_runs.py` works (it does). We’ll build on that.
+
+---
+
+### Phase 1: Add obstacle family #3 “Rhythm” (and keep logging clean)
+
+**Goal:** You can die to `rhythm_wave` and it shows up in `runs.csv` as `obstacle_collision,rhythm_wave`.
+
+**1) Backup now**
+From project root:
+
+```bat
+copy src\main.py src\main_day3_backup.py
+```
+
+**2) Add the Rhythm obstacle class**
+Open `src\main.py`. Under your `TimingGatePair` class, paste this:
+
+```python
+class RhythmWavePair:
+    """
+    Rhythm family: the gap center moves in a predictable wave.
+    Player can lock into the pattern if they learn the cadence.
+    """
+    def __init__(self, x):
+        self.family = "rhythm_wave"
+        self.x = x
+        self.passed = False
+
+        self.base_gap = GAP_SIZE
+        self.gap = self.base_gap  # constant gap size, but moving center
+
+        # Wave center motion
+        self.center_base = HEIGHT * 0.5
+        self.amp_y = 170                  # how far the gap center swings
+        self.omega = 2 * math.pi * 0.65   # cycles/sec
+        self.t0 = time.time()
+
+    def update(self, dt):
+        self.x -= PIPE_SPEED * dt
+
+    def is_offscreen(self):
+        return self.x + PIPE_WIDTH < 0
+
+    def rects(self):
+        # Oscillating gap center
+        center = self.center_base + self.amp_y * math.sin(self.omega * (time.time() - self.t0))
+
+        # Clamp center so the gap stays on-screen
+        margin = 90
+        center = max(margin + self.gap / 2, min(HEIGHT - margin - self.gap / 2, center))
+
+        top_height = center - self.gap / 2
+        bot_y = center + self.gap / 2
+        bot_height = HEIGHT - bot_y
+
+        top = pygame.Rect(int(self.x), 0, PIPE_WIDTH, int(top_height))
+        bottom = pygame.Rect(int(self.x), int(bot_y), PIPE_WIDTH, int(bot_height))
+        return top, bottom
+```
+
+**3) Update baseline spawning to cycle 3 families**
+Find your spawn code and change the alternation block to:
+
+```python
+if run["spawn_count"] % 3 == 0:
+    run["obstacles"].append(PipePair(WIDTH + 10))
+elif run["spawn_count"] % 3 == 1:
+    run["obstacles"].append(TimingGatePair(WIDTH + 10))
+else:
+    run["obstacles"].append(RhythmWavePair(WIDTH + 10))
+
+run["spawn_count"] += 1
+```
+
+**4) Give it a distinct colour**
+In your draw loop where you pick colour by family, use:
+
+```python
+if o.family == "precision_gap":
+    color = (80, 200, 140)
+elif o.family == "timing_gate":
+    color = (220, 170, 90)
+else:
+    color = (160, 120, 255)  # rhythm_wave
+```
+
+**5) Run and force a rhythm death**
+
+```bat
+py src\main.py
+```
+
+Crash into a purple one and then confirm with:
+
+```bat
+powershell -NoProfile -Command "Get-Content data\runs.csv -Tail 5"
+```
+
+You want at least one `obstacle_collision,rhythm_wave`.
+
+That’s Phase 1 done.
+
+---
+
+### Phase 2: “Brains, but tiny” (skill estimate + Thompson sampling selector)
+
+We’ll do this in a way that still looks good to faculty: simple, explainable, robust. Also, we’ll keep it “online learning”: updates every run.
+
+**Goal:** Game has two modes you can toggle: baseline vs personalised. In personalised mode, the game chooses which family to spawn next based on your recent performance, and updates its policy after each run.
+
+#### 2A) Create a policy module: `src\policy.py`
+
+Create `src\policy.py` and paste this:
+
+```python
+import json
+import os
+import random
+
+STATE_PATH = os.path.join("data", "policy_state.json")
+
+FAMILIES = ["precision_gap", "timing_gate", "rhythm_wave"]
+
+def clamp(x, lo, hi):
+    return max(lo, min(hi, x))
+
+class SkillTracker:
+    """
+    Simple skill estimate using exponential moving average of survival time.
+    """
+    def __init__(self, ema_survival=3.0, alpha=0.15):
+        self.ema_survival = float(ema_survival)
+        self.alpha = float(alpha)
+
+    def update(self, survival_time_s: float):
+        if survival_time_s is None:
+            return
+        self.ema_survival = (1 - self.alpha) * self.ema_survival + self.alpha * float(survival_time_s)
+
+    def bin(self):
+        """
+        Discretise skill to make a tiny contextual bandit.
+        """
+        s = self.ema_survival
+        if s < 3.0:
+            return "low"
+        if s < 8.0:
+            return "mid"
+        return "high"
+
+class ThompsonBandit:
+    """
+    Contextual (binned) Thompson sampling with Beta distributions.
+    Reward is treated as probability-like in [0, 1].
+    """
+    def __init__(self):
+        # params[skill_bin][family] = [a, b]
+        self.params = {b: {f: [1.0, 1.0] for f in FAMILIES} for b in ["low", "mid", "high"]}
+        self.last_choice = None
+
+    def sample_beta(self, a, b):
+        # random.betavariate exists in Python stdlib
+        return random.betavariate(a, b)
+
+    def choose_family(self, skill_bin: str, recent_families: list[str]):
+        """
+        Choose by Thompson sampling, with a light anti-repeat guard.
+        """
+        scores = {}
+        for f in FAMILIES:
+            a, b = self.params[skill_bin][f]
+            scores[f] = self.sample_beta(a, b)
+
+        # tiny variety nudge: if last 2 spawns were same family, downweight it
+        if len(recent_families) >= 2 and recent_families[-1] == recent_families[-2]:
+            repeat = recent_families[-1]
+            scores[repeat] *= 0.6
+
+        choice = max(scores, key=scores.get)
+        self.last_choice = choice
+        return choice, scores
+
+    def update(self, skill_bin: str, family: str, reward: float):
+        reward = clamp(float(reward), 0.0, 1.0)
+        a, b = self.params[skill_bin][family]
+        # Interpret reward as success probability
+        self.params[skill_bin][family] = [a + reward, b + (1.0 - reward)]
+
+def load_state():
+    if not os.path.exists(STATE_PATH):
+        return SkillTracker(), ThompsonBandit()
+
+    with open(STATE_PATH, "r", encoding="utf-8") as f:
+        raw = json.load(f)
+
+    st = SkillTracker(raw.get("ema_survival", 3.0), raw.get("alpha", 0.15))
+    tb = ThompsonBandit()
+    tb.params = raw.get("bandit_params", tb.params)
+    return st, tb
+
+def save_state(skill: SkillTracker, bandit: ThompsonBandit):
+    os.makedirs("data", exist_ok=True)
+    raw = {
+        "ema_survival": skill.ema_survival,
+        "alpha": skill.alpha,
+        "bandit_params": bandit.params,
+    }
+    with open(STATE_PATH, "w", encoding="utf-8") as f:
+        json.dump(raw, f, indent=2)
+```
+
+#### 2B) Wire it into `main.py`
+
+In `src\main.py`:
+
+**1) Add imports**
+Near the top:
+
+```python
+from policy import load_state, save_state
+```
+
+**2) After pygame init and session setup, load policy**
+Somewhere after you set `session_id`:
+
+```python
+skill, bandit = load_state()
+recent_families = []   # history of chosen spawns for variety guard
+```
+
+**3) Add a mode toggle key**
+You already have `mode = "baseline"`. Add a key handler:
+
+```python
+if event.type == pygame.KEYDOWN:
+    if event.key == pygame.K_m:
+        mode = "personalised" if mode == "baseline" else "baseline"
+```
+
+**4) Change your spawn logic**
+Instead of cycling by `spawn_count % 3`, do:
+
+```python
+run["spawn_timer"] += dt
+if run["spawn_timer"] >= SPAWN_EVERY_S:
+    run["spawn_timer"] = 0.0
+
+    if mode == "baseline":
+        # fixed cycle (still good for A/B comparisons)
+        if run["spawn_count"] % 3 == 0:
+            family = "precision_gap"
+        elif run["spawn_count"] % 3 == 1:
+            family = "timing_gate"
+        else:
+            family = "rhythm_wave"
+        run["spawn_count"] += 1
+        why = "baseline cycle"
+    else:
+        skill_bin = skill.bin()
+        family, scores = bandit.choose_family(skill_bin, recent_families)
+        why = f"TS({skill_bin}) picked {family}"
+
+    # create obstacle instance
+    if family == "precision_gap":
+        run["obstacles"].append(PipePair(WIDTH + 10))
+    elif family == "timing_gate":
+        run["obstacles"].append(TimingGatePair(WIDTH + 10))
+    else:
+        run["obstacles"].append(RhythmWavePair(WIDTH + 10))
+
+    recent_families.append(family)
+    if len(recent_families) > 20:
+        recent_families.pop(0)
+
+    # store last 'why' to display briefly
+    run["last_why"] = why
+    run["why_timer"] = 2.0
+```
+
+**5) Add `last_why` fields to reset_run**
+In `reset_run()` dict add:
+
+```python
+"last_why": "",
+"why_timer": 0.0,
+"last_spawn_family": "",
+```
+
+And after spawning set:
+
+```python
+run["last_spawn_family"] = family
+```
+
+**6) At end of run, compute reward and update policy (personalised mode only)**
+Right before you call `log_run(row)` when you hit GAME_OVER:
+
+Compute reward like this (simple, defensible):
+
+```python
+# Reward: survive longer is better, but cap to avoid runaway
+target = 8.0  # seconds
+reward = max(0.0, min(1.0, survival / target))
+
+if mode == "personalised":
+    skill_bin = skill.bin()
+    # Update skill from survival
+    skill.update(survival)
+    # Update bandit based on the family we most recently spawned
+    if run.get("last_spawn_family"):
+        bandit.update(skill_bin, run["last_spawn_family"], reward)
+    save_state(skill, bandit)
+```
+
+**7) Show mode + “why” on HUD**
+In draw section, add:
+
+```python
+mode_text = small_font.render(f"Mode: {mode}", True, (200, 200, 210))
+screen.blit(mode_text, (20, 120))
+
+if run.get("why_timer", 0) > 0:
+    run["why_timer"] -= dt
+    why_text = small_font.render(run.get("last_why", ""), True, (180, 180, 200))
+    screen.blit(why_text, (20, 145))
+```
+
+Now run it:
+
+```bat
+py src\main.py
+```
+
+Press **M** to toggle baseline/personalised. In personalised, it’ll start learning.
+
+That’s your “brains, but tiny.”
+
+---
+
+### Phase 3: Guardrails + explainability (make it feel fair, not random)
+
+**Goal:** The personalisation can’t spike difficulty, can’t get stuck in one family, and can explain itself in one sentence.
+
+You already have explainability stub (`why`). Now add guardrails:
+
+#### 3A) Variety guardrail (hard rule)
+
+In `policy.py`, modify `choose_family` to enforce:
+
+* No more than 2 repeats.
+* At least one of each family every 10 spawns.
+
+Simplest way without overengineering: in `main.py` before choosing, enforce an override.
+
+Add this helper in `main.py` (top-level):
+
+```python
+def enforce_variety(choice, recent, window=10):
+    if len(recent) < window:
+        return choice
+
+    last2_same = len(recent) >= 2 and recent[-1] == recent[-2]
+    if last2_same and choice == recent[-1]:
+        # force a different family
+        for f in ["precision_gap", "timing_gate", "rhythm_wave"]:
+            if f != choice:
+                return f
+
+    # ensure coverage in window
+    seen = set(recent[-window:])
+    if len(seen) < 3:
+        missing = [f for f in ["precision_gap", "timing_gate", "rhythm_wave"] if f not in seen]
+        if missing:
+            return missing[0]
+
+    return choice
+```
+
+Then in your personalised spawn:
+
+```python
+family, scores = bandit.choose_family(skill_bin, recent_families)
+family = enforce_variety(family, recent_families, window=10)
+```
+
+#### 3B) Difficulty guardrail (smooth changes)
+
+Introduce a “difficulty scalar” that changes slowly, not jumpy. In `policy_state.json` we can store it, but you can start in-memory.
+
+In `main.py` after loading state:
+
+```python
+difficulty = 0.0  # 0 to 1
+```
+
+At end of run when personalised mode:
+
+```python
+# If reward is low, ease difficulty down slightly; if high, increase slightly
+delta = (reward - 0.6) * 0.05   # small step
+delta = max(-0.03, min(0.03, delta))  # cap per run
+difficulty = max(0.0, min(1.0, difficulty + delta))
+```
+
+Then apply difficulty to parameters (simple and visible):
+
+* increase speed slightly with difficulty
+* reduce gap slightly with difficulty
+* increase timing amp slightly with difficulty
+
+Inside each obstacle class, allow parameters, or easiest: set globals each spawn based on difficulty. The clean version is to pass parameters, but for now:
+
+In spawn block, compute:
+
+```python
+gap_scale = 1.0 - 0.18 * difficulty
+speed_scale = 1.0 + 0.20 * difficulty
+```
+
+Then when creating obstacles, set per-instance gap/speed attributes (we add them):
+
+Modify each class to use `self.speed` and `self.gap` instead of globals. For example in `PipePair`:
+
+* In `__init__`, set `self.speed = PIPE_SPEED`, `self.gap = GAP_SIZE`
+* In `update`, use `self.x -= self.speed * dt`
+* In `rects`, use `self.gap` instead of `GAP_SIZE`
+
+Then in spawn:
+
+```python
+o = PipePair(WIDTH + 10)
+o.gap = GAP_SIZE * gap_scale
+o.speed = PIPE_SPEED * speed_scale
+run["obstacles"].append(o)
+```
+
+Do similarly for TimingGatePair and RhythmWavePair (they already store gap, amp). You can set:
+
+* `o.base_gap = GAP_SIZE * gap_scale`
+* `o.amp = 70 * (1.0 + 0.3 * difficulty)` for timing
+* `o.amp_y = 170 * (1.0 + 0.3 * difficulty)` for rhythm
+
+Now your system adapts but never jolts.
+
+Explainability becomes real: your `why` string can include difficulty:
+
+```python
+why = f"TS({skill_bin}) -> {family}, diff={difficulty:.2f}"
+```
+
+That’s Phase 3.
+
+---
+
+### Phase 4: Evaluation + packaging (the “waow” that faculty sees)
+
+**Goal:** You can show baseline vs personalised differences with evidence and a clean artefact bundle.
+
+#### 4A) Data collection protocol (tiny playtest)
+
+Do this with yourself first, then with a few friends:
+
+* Baseline mode: play 10 runs (press M until baseline).
+* Personalised mode: play 10 runs (press M until personalised).
+* Repeat once (optional).
+
+Your CSV already has `mode`, good. If your mode toggle isn’t being logged yet, make sure you log the current `mode` exactly as you already do.
+
+#### 4B) Update analysis to compare modes
+
+Create `src\analyze_ab.py`:
+
+```python
+import os
+import pandas as pd
+import matplotlib.pyplot as plt
+
+DATA_PATH = os.path.join("data", "runs.csv")
+OUT_DIR = "reports"
+PLOT_OUT = os.path.join(OUT_DIR, "ab_mean_survival.png")
+
+def main():
+    os.makedirs(OUT_DIR, exist_ok=True)
+    df = pd.read_csv(DATA_PATH)
+
+    df["obstacle_family"] = df["obstacle_family"].fillna("")
+    df["survival_time_s"] = pd.to_numeric(df["survival_time_s"], errors="coerce")
+
+    # Only obstacle-tagged rows for family comparison
+    fam = df[df["obstacle_family"] != ""].copy()
+    if fam.empty:
+        print("No obstacle_family rows yet.")
+        return
+
+    # Summary: mean survival by mode and family
+    pivot = (
+        fam.groupby(["mode", "obstacle_family"])["survival_time_s"]
+        .mean()
+        .reset_index()
+        .sort_values(["mode", "obstacle_family"])
+    )
+    print("\n=== Mean survival by mode + family ===\n")
+    print(pivot.round(3).to_string(index=False))
+
+    # Plot grouped bar
+    chart = fam.pivot_table(index="obstacle_family", columns="mode", values="survival_time_s", aggfunc="mean")
+    ax = chart.plot(kind="bar")
+    ax.set_title("Mean survival by obstacle family and mode")
+    ax.set_xlabel("obstacle_family")
+    ax.set_ylabel("mean survival (s)")
+    plt.tight_layout()
+    plt.savefig(PLOT_OUT, dpi=160)
+    plt.close()
+    print(f"\nSaved plot -> {PLOT_OUT}\n")
+
+if __name__ == "__main__":
+    main()
+```
+
+Run:
+
+```bat
+py src\analyze_ab.py
+```
+
+This gives you a plot that screams “personalisation had an effect” if it does.
+
+#### 4C) The portfolio bundle
+
+Make a neat folder structure in your repo:
+
+* `src/` game code
+* `data/` (optional in public repo, or include a small sample CSV)
+* `reports/` charts + summary CSV
+* `README.md`
+* `demo.mp4` (or a link)
+
+README should include:
+
+* what the game is
+* what telemetry you log
+* what personalisation does
+* what guardrails exist
+* what your evaluation shows (1 chart)
+
+#### 4D) 60–90s demo video script (easy and strong)
+
+Record your screen while you:
+
+1. Show the mode toggle (baseline vs personalised).
+2. Show the “Why this?” text changing.
+3. Play 2–3 quick runs baseline, then 2–3 personalised.
+4. Flash the `reports\ab_mean_survival.png`.
+
+That’s it. Faculty love seeing “working system + measured outcome” in under 2 minutes.
+
+---
+
+### What you do next, right now
+
+Don’t try to implement all phases in one sitting. Do it in this order:
+
+1. Add Rhythm family (Phase 1)
+2. Add mode toggle + bandit (Phase 2)
+3. Add variety + difficulty guardrails (Phase 3)
+4. Add A/B analysis script and generate the plot (Phase 4)
+
+If you want the smoothest path: start with Phase 1 today, then Phase 2 tomorrow.
+
+Say the word “rhythm done” when you’ve got `obstacle_collision,rhythm_wave` in your CSV, and I’ll give you the tightest possible patch set for Phase 2 wiring (so you don’t get lost in file edits).

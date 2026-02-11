@@ -1,0 +1,3 @@
+obstacle_family,runs,collision_rate,mean_survival_s,median_survival_s,mean_taps,mean_tap_interval_ms
+precision_gap,9,0.333333,7.736,2.788,16.666667,384.51
+timing_gate,4,1.0,2.7465,2.746,6.25,423.4925
