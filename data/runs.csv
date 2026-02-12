@@ -39,3 +39,4 @@ timestamp_epoch,player_id,session_id,run_id,mode,survival_time_s,score_passed_pi
 1770560406,farrah,1770560384,5,personalised,3.159,1,obstacle_collision,rhythm_wave,9,357.52,274.93
 1770560408,farrah,1770560384,6,personalised,1.425,0,ceiling,,7,198.37,9.01
 1770560410,farrah,1770560384,7,personalised,0.608,0,ground,,0,,
+1770872686,farrah,1770872686,1,baseline,0.595,0,ground,,0,,

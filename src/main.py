@@ -4,7 +4,7 @@ import time
 import random
 import pygame
 import math
-from policy import load_state, save_state
+from policy import FAMILIES, load_state, save_state
 
 
 # -----------------------------
@@ -103,21 +103,23 @@ class PipePair:
     """
     def __init__(self, x):
         self.family = "precision_gap"
+        self.gap = GAP_SIZE
+        self.speed = PIPE_SPEED
         margin = 80
-        gap_y = random.randint(margin + GAP_SIZE // 2, HEIGHT - margin - GAP_SIZE // 2)
+        gap_y = random.randint(margin + int(self.gap // 2), HEIGHT - margin - int(self.gap // 2))
         self.x = x
         self.gap_y = gap_y
         self.passed = False
 
     def update(self, dt):
-        self.x -= PIPE_SPEED * dt
+        self.x -= self.speed * dt
 
     def is_offscreen(self):
         return self.x + PIPE_WIDTH < 0
 
     def rects(self):
-        top_height = self.gap_y - GAP_SIZE // 2
-        bot_y = self.gap_y + GAP_SIZE // 2
+        top_height = self.gap_y - self.gap / 2
+        bot_y = self.gap_y + self.gap / 2
         bot_height = HEIGHT - bot_y
 
         top = pygame.Rect(int(self.x), 0, PIPE_WIDTH, int(top_height))
@@ -131,20 +133,22 @@ class TimingGatePair:
     """
     def __init__(self, x):
         self.family = "timing_gate"
+        self.gap = GAP_SIZE
+        self.speed = PIPE_SPEED
         margin = 90
-        self.gap_y = random.randint(margin + GAP_SIZE // 2, HEIGHT - margin - GAP_SIZE // 2)
+        self.gap_y = random.randint(margin + int(self.gap // 2), HEIGHT - margin - int(self.gap // 2))
 
         self.x = x
         self.passed = False
 
         # Gap breathing params
-        self.base_gap = GAP_SIZE          # centered around Day 1 gap size
+        self.base_gap = self.gap          # centered around Day 1 gap size
         self.amp = 70                     # how much it opens/closes
         self.omega = 2 * math.pi * 0.8    # ~0.8 cycles/sec
         self.t0 = time.time()
 
     def update(self, dt):
-        self.x -= PIPE_SPEED * dt
+        self.x -= self.speed * dt
 
     def is_offscreen(self):
         return self.x + PIPE_WIDTH < 0
@@ -154,10 +158,9 @@ class TimingGatePair:
         return max(110, min(260, g))  # clamp so it never becomes impossible or too wide
 
     def rects(self):
-        gap = self.current_gap()
-
-        top_height = self.gap_y - gap / 2
-        bot_y = self.gap_y + gap / 2
+        self.gap = self.current_gap()
+        top_height = self.gap_y - self.gap / 2
+        bot_y = self.gap_y + self.gap / 2
         bot_height = HEIGHT - bot_y
 
         top = pygame.Rect(int(self.x), 0, PIPE_WIDTH, int(top_height))
@@ -176,6 +179,7 @@ class RhythmWavePair:
 
         self.base_gap = GAP_SIZE
         self.gap = self.base_gap  # constant gap size, but moving center
+        self.speed = PIPE_SPEED
 
         # Wave center motion
         self.center_base = HEIGHT * 0.5
@@ -184,7 +188,7 @@ class RhythmWavePair:
         self.t0 = time.time()
 
     def update(self, dt):
-        self.x -= PIPE_SPEED * dt
+        self.x -= self.speed * dt
 
     def is_offscreen(self):
         return self.x + PIPE_WIDTH < 0
@@ -352,7 +356,7 @@ def main():
                     o.speed = PIPE_SPEED * speed_scale
                 elif family == "timing_gate":
                     o = TimingGatePair(WIDTH + 10)
-                    o.gap = GAP_SIZE * gap_scale
+                    o.base_gap = GAP_SIZE * gap_scale
                     o.speed = PIPE_SPEED * speed_scale
                     o.amp = 70 * (1.0 + 0.3 * d_eff)
                 else:
@@ -414,18 +418,22 @@ def main():
                 reward = max(0.0, min(1.0, survival / target))
 
                 if mode == "personalised":
+                    skill_bin = skill.bin()
+                    skill.update(survival)
+
                     # update difficulty once per run (not per frame)
                     delta = (reward - 0.6) * 0.05
                     delta = max(-0.03, min(0.03, delta))
                     difficulty = max(0.0, min(1.0, difficulty + delta))
 
-                    if run.get("death_reason") == "obstacle_collision" and run.get("death_family"):
-                        bandit.update(skill_bin, run["death_family"], reward)
+                    family = run.get("death_family")
+                    if run.get("death_reason") == "obstacle_collision" and family in FAMILIES:
+                        bandit.update(skill_bin, family, reward)
                 
                     save_state(skill, bandit)
 
-                tap_count = len(run[""tap_times""])
-                mean_ms, sd_ms = safe_stats_intervals_ms(run[""tap_times""])
+                tap_count = len(run["tap_times"])
+                mean_ms, sd_ms = safe_stats_intervals_ms(run["tap_times"])
 
                 row = {
                     "timestamp_epoch": int(end_time),
