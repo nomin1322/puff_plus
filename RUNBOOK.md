@@ -28,3 +28,12 @@ Undo a single file:
 ### Undo everything since last commit (use with care)
 - `git restore .`
 - `git reset --hard`
+> Codex may be configured to auto-run safe verify commands; see AGENTS.md Command approval policy.
+## Verify (checkpoint)
+- `git status`
+- `git --no-pager diff --stat`
+- `py -m compileall .`
+- `py src/analyze_runs.py`
+- `Test-Path reports/summary_by_family.csv`
+- `Test-Path reports/mean_survival_by_family.png`
+- `Test-Path reports/mean_survival_by_family.txt`
