@@ -1,4 +1,4 @@
-﻿import os
+import os
 import csv
 import time
 import random
@@ -117,7 +117,7 @@ class PipePair:
     def is_offscreen(self):
         return self.x + PIPE_WIDTH < 0
 
-    def rects(self):
+    def rects(self, now=None):
         top_height = self.gap_y - self.gap / 2
         bot_y = self.gap_y + self.gap / 2
         bot_height = HEIGHT - bot_y
@@ -153,12 +153,14 @@ class TimingGatePair:
     def is_offscreen(self):
         return self.x + PIPE_WIDTH < 0
 
-    def current_gap(self):
-        g = self.base_gap + self.amp * math.sin(self.omega * (time.time() - self.t0))
+    def current_gap(self, now=None):
+        if now is None:
+            now = time.time()
+        g = self.base_gap + self.amp * math.sin(self.omega * (now - self.t0))
         return max(110, min(260, g))  # clamp so it never becomes impossible or too wide
 
-    def rects(self):
-        self.gap = self.current_gap()
+    def rects(self, now=None):
+        self.gap = self.current_gap(now)
         top_height = self.gap_y - self.gap / 2
         bot_y = self.gap_y + self.gap / 2
         bot_height = HEIGHT - bot_y
@@ -193,9 +195,11 @@ class RhythmWavePair:
     def is_offscreen(self):
         return self.x + PIPE_WIDTH < 0
 
-    def rects(self):
+    def rects(self, now=None):
         # Oscillating gap center
-        center = self.center_base + self.amp_y * math.sin(self.omega * (time.time() - self.t0))
+        if now is None:
+            now = time.time()
+        center = self.center_base + self.amp_y * math.sin(self.omega * (now - self.t0))
 
         # Clamp center so the gap stays on-screen
         margin = 90
@@ -210,9 +214,32 @@ class RhythmWavePair:
         return top, bottom
 
 def enforce_variety(choice, recent, window=10):
+    """Light guardrail to stop one family from dominating.
+
+    - If the last two spawns were the same family, don't allow a third in a row.
+    - If the last `window` spawns didn't cover all families, nudge toward a missing one.
+
+    Uses `FAMILIES` from policy.py so it stays future-proof if you add more families.
+    """
     if len(recent) < window:
         return choice
 
+    families = list(FAMILIES)
+
+    # Prevent 3-in-a-row
+    last2_same = len(recent) >= 2 and recent[-1] == recent[-2]
+    if last2_same and choice == recent[-1]:
+        for f in families:
+            if f != choice:
+                return f
+
+    # Encourage coverage
+    seen = set(recent[-window:])
+    missing = [f for f in families if f not in seen]
+    if missing:
+        return missing[0]
+
+    return choice
     last2_same = len(recent) >= 2 and recent[-1] == recent[-2]
     if last2_same and choice == recent[-1]:
         # force a different family
@@ -233,7 +260,7 @@ def enforce_variety(choice, recent, window=10):
 def main():
     pygame.init()
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
-    DAY_LABEL = "Day 3 â€” Rhythm Waves"
+    DAY_LABEL = "Day 3 - Rhythm Waves"
     pygame.display.set_caption(f"PUFF+ {DAY_LABEL}")
     clock = pygame.time.Clock()
     font = pygame.font.SysFont(None, 36)
@@ -258,6 +285,7 @@ def main():
             "obstacles": [],
             "spawn_timer": 0.0,
             "start_time": time.time(),
+            "freeze_now": None,
             "alive": True,
             "death_reason": "", 
             "death_family": "",
@@ -275,6 +303,11 @@ def main():
     running = True
     while running:
         dt = clock.tick(FPS) / 1000.0
+
+        # Use a single timestamp for obstacle geometry this frame.
+        # When GAME_OVER, freeze geometry at the death moment (run["freeze_now"]).
+        now_rect = time.time() if state == "RUNNING" else run.get("freeze_now", time.time())
+
 
         # ---- Events
         for event in pygame.event.get():    # <- THIS is the event loop
@@ -316,11 +349,6 @@ def main():
             if run["spawn_timer"] >= SPAWN_EVERY_S:
                 run["spawn_timer"] = 0.0
                 # after you set `family` and `why`...
-                d_eff = difficulty if mode == "personalised" else 0.0  # keep baseline clean for A/B
-
-                gap_scale   = 1.0 - 0.18 * d_eff
-                speed_scale = 1.0 + 0.20 * d_eff
-
                 # 1) decide family
                 if mode == "baseline":
                     # fixed cycle (still good for A/B comparisons)
@@ -402,7 +430,7 @@ def main():
                 # Collision with pipes
                 player_rect = run["player"].rect
                 for o in run["obstacles"]:
-                    top, bottom = o.rects()
+                    top, bottom = o.rects(now_rect)
                     if player_rect.colliderect(top) or player_rect.colliderect(bottom):
                         run["death_reason"] = "obstacle_collision"
                         run["death_family"] = o.family
@@ -412,6 +440,7 @@ def main():
             # If just died, log immediately
             if state == "GAME_OVER":
                 end_time = time.time()
+                run['freeze_now'] = end_time
                 survival = end_time - run["start_time"]
 
                 target = 8.0  # seconds
@@ -463,7 +492,7 @@ def main():
 
         # Draw obstacles
         for o in run["obstacles"]:
-            top, bottom = o.rects()
+            top, bottom = o.rects(now_rect)
 
             if o.family == "precision_gap":
                 color = (80, 200, 140)
