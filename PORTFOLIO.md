@@ -56,7 +56,7 @@ Report tables referenced on this page:
 
 ### Death Count by Family
 
-![Death count by family](reports/death_count_by_family.png)
+![Death count by family](docs/figures/death_count_by_family.png)
 
 `reports/death_count_by_family.csv` shows `rhythm_wave` (15), `precision_gap` (10), `timing_gate` (6), and `none` (3), total `n=34`.
 This indicates deaths are not evenly distributed across families in the current sample.
@@ -64,7 +64,7 @@ Interpretation is directional because family exposure and run outcomes are affec
 
 ### Mean Survival by Family
 
-![Mean survival by family](reports/mean_survival_by_family.png)
+![Mean survival by family](docs/figures/mean_survival_by_family.png)
 
 `reports/summary_by_family.csv` reports mean survival of `5.308s` (`rhythm_wave`), `5.147s` (`timing_gate`), `3.316s` (`precision_gap`), and `1.158s` (`none`).
 The `none` group (ground/ceiling, no obstacle family) is shortest, which is consistent with early-run control failures.
@@ -74,7 +74,7 @@ Family-level means are useful for ranking friction points, but they should not b
 
 ## Page 4 - Baseline vs Personalised
 
-![Mean survival by family by mode](reports/mean_survival_by_family_by_mode.png)
+![Mean survival by family by mode](docs/figures/mean_survival_by_family_by_mode.png)
 
 `reports/mean_survival_by_family_by_mode.csv` shows mixed mode effects by family: `timing_gate` is higher in personalised (`5.46s`, n=4) than baseline (`4.52s`, n=2), while `precision_gap` and `rhythm_wave` are slightly higher in baseline in this sample.
 Because several cells are small (for example, `timing_gate` baseline n=2), this is not enough evidence to claim a stable global winner.
