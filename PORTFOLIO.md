@@ -1,5 +1,4 @@
 # Puff+ Portfolio Wrapper
-Audience: SIT Applied AI admissions and technical review.
 
 ---
 
@@ -14,9 +13,9 @@ Current report set gives directional evidence on failure distribution and surviv
 
 ### What I built / Why it matters
 
-What I built: an instrumented game loop (`src/main.py`) plus a reproducible analysis pipeline (`src/analyze_runs.py`) that outputs reviewer-ready tables and figures.
+What I built: an instrumented game loop (`src/main.py`) plus a reproducible analysis pipeline (`src/analyze_runs.py`) that outputs clear tables and figures.
 
-Why it matters: admissions and technical reviewers can inspect concrete telemetry, trace labels to source columns, and verify claims from raw logs to plots.
+Why it matters: readers can inspect concrete telemetry, trace labels to source columns, and verify claims from raw logs to plots.
 
 Gameplay screenshot placeholder: insert one in-game frame showing HUD (`Mode`, `Score`, `Time`) and at least one obstacle family on screen.
 
@@ -93,7 +92,7 @@ Current by-mode output should be read as a checkpoint for iteration, not a final
 - Collect a larger, pre-balanced run set per family and mode.
 - Add uncertainty metrics (CIs/error bars) to summary outputs.
 - Stratify analysis by session order to separate learning from policy effects.
-- Expand reviewer artifacts with per-run distributions, not only means.
+- Expand artifacts with per-run distributions, not only means.
 - Add a fixed evaluation protocol (same duration and switching schedule each session).
 
 ### How to reproduce

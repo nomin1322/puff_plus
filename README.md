@@ -1,11 +1,11 @@
 # Puff+
-Puff+ is a compact adaptive gameplay prototype built for SIT Applied AI admissions and technical reviewers. It captures per-run telemetry from a Flappy Bird-style environment, supports baseline vs personalised mode behavior, and produces reproducible analysis outputs that make model behavior and player outcomes easy to inspect.
+Puff+ is a compact, instrumented Flappy Bird-style prototype built as a portfolio project. It logs per-run telemetry (survival, score, failure context, and input rhythm), supports baseline vs personalised mode (adaptive policy) for controlled comparisons, and generates reproducible analysis outputs (tables + plots) from the raw logs.
 
 ## What it demonstrates
 - Structured run logging to `data/runs.csv` for gameplay, performance, and input rhythm.
 - Baseline vs personalised mode switching in-game and mode-aware analysis offline.
 - Reproducible analysis from raw logs to report artifacts with `py` commands.
-- Clear portfolio artifacts (plots + CSV summaries) for technical review.
+- Clear portfolio artifacts (plots + CSV summaries).
 
 ## Quickstart
 ```powershell
