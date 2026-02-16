@@ -1,8 +1,8 @@
 # Puff+ Portfolio
 Repo: https://github.com/nomin1322/puff_plus
 
-## What this project is proving
-Puff+ demonstrates an end-to-end evaluation loop:
+## Project Goals
+Puff+ aims to demonstrate an end-to-end evaluation loop:
 
 **instrumented gameplay → interpretable failure labels → baseline vs adaptive comparison → reproducible evidence (plots + tables).**
 
@@ -26,10 +26,12 @@ Mode can be toggled live with the **M** key, so baseline and personalised runs c
 
 `src/analyze_runs.py` converts raw logs into reproducible report outputs (CSV tables + PNG plots). The current report set is meant to be **directional evidence you can inspect end-to-end**, not a final performance claim.
 
-### What I built / why it matters
-**What I built:** an instrumented game loop (`src/main.py`) plus an analysis pipeline (`src/analyze_runs.py`) that turns raw run logs into clear plots and tables.
+### Review note
+Claims in this document can be traced from `data/runs.csv` → derived labels → summary tables → plotted figures.
 
-**Why it matters:** the story is traceable from **raw columns → labels → summaries → figures**, so any claim can be checked against logged data and reproduced outputs.
+Puff+ combines an instrumented game loop (`src/main.py`) with an analysis pipeline (`src/analyze_runs.py`) that turns raw run logs into clear plots and tables.
+
+As such the story is traceable from **raw columns → labels → summaries → figures**, so any claim can be checked against logged data and reproduced outputs.
 
 Gameplay screenshot placeholder: insert one in-game screenshot showing the HUD (Mode, Score, Time) and at least one obstacle family on screen.
 
