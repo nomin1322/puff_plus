@@ -1,5 +1,5 @@
 # Puff+ Portfolio Wrapper
-https://github.com/nomin1322/puff_plus
+Repo: [github.com/nomin1322/puff_plus](https://github.com/nomin1322/puff_plus)
 
 ---
 
