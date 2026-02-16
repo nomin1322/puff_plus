@@ -1,41 +1,41 @@
 # Puff+ Portfolio
 Repo: https://github.com/nomin1322/puff_plus
 
-Goal (what this project is proving):
-Build an end-to-end loop from instrumented gameplay → interpretable failure labels → baseline vs adaptive comparison → reproducible evidence (plots + tables).
+## What this project is proving
+Puff+ demonstrates an end-to-end evaluation loop:
 
-Puff+ treats a simple Flappy Bird-style game as a controlled micro-environment. The point is not “a perfect game”, but a measurable workflow: collect consistent per-run signals, group failures into named patterns, then test whether an adaptive policy responds to where the player struggles while keeping a baseline mode for fair comparison.
+**instrumented gameplay → interpretable failure labels → baseline vs adaptive comparison → reproducible evidence (plots + tables).**
 
----
+Puff+ treats a simple Flappy Bird-style game as a controlled micro-environment. The goal is not “a perfect game.” The goal is a *measurable workflow*: collect consistent per-run signals, group failures into named patterns, then test whether an adaptive policy responds to where the player struggles while keeping a baseline mode for fair comparison.
 
-## Page 1 - Project Summary
+<!-- pagebreak -->
 
-Puff+ is a Flappy Bird-style prototype with per-run measurements captured automatically at the end of every run.
-Each run writes a row into `data/runs.csv`, including survival time, score, how the run ended, which obstacle pattern was involved (if any), and a simple summary of input rhythm (tap count + timing statistics).
+## 1) Project summary
+Puff+ is a Flappy Bird-style prototype that records per-run measurements automatically at the end of every run. Each run writes one row into `data/runs.csv`, including:
+
+- performance: `survival_time_s`, `score_passed_pipes`
+- outcome context: `death_reason`, and (when relevant) `obstacle_family`
+- input rhythm: `tap_count`, `tap_mean_interval_ms`, `tap_sd_interval_ms`
 
 The game supports two modes in one executable:
-- baseline: a fixed, predictable obstacle-family schedule for a control condition
-- personalised (adaptive): obstacle-family selection and tuning respond to observed failure patterns
 
-Mode can be toggled live with the `M` key, so baseline and personalised runs can be collected in one session.
+- **baseline:** a fixed, predictable obstacle-family schedule used as a control condition
+- **personalised (adaptive):** obstacle-family selection and tuning respond to observed failure patterns
 
-`src/analyze_runs.py` converts raw logs into reproducible report outputs (CSV tables + PNG plots). The current report set is meant to be directional evidence you can inspect end-to-end, not a final performance claim.
+Mode can be toggled live with the **M** key, so baseline and personalised runs can be collected in one session.
 
-### What I built / Why it matters
+`src/analyze_runs.py` converts raw logs into reproducible report outputs (CSV tables + PNG plots). The current report set is meant to be **directional evidence you can inspect end-to-end**, not a final performance claim.
 
-What I built:
-An instrumented game loop (`src/main.py`) + an analysis pipeline (`src/analyze_runs.py`) that turns raw run logs into clear plots and tables.
+### What I built / why it matters
+**What I built:** an instrumented game loop (`src/main.py`) plus an analysis pipeline (`src/analyze_runs.py`) that turns raw run logs into clear plots and tables.
 
-Why it matters:
-Anyone reading this can trace the story from raw columns → labels → summaries → figures. The work becomes credible because claims are tied to logged data and reproducible outputs.
+**Why it matters:** the story is traceable from **raw columns → labels → summaries → figures**, so any claim can be checked against logged data and reproduced outputs.
 
-Gameplay screenshot placeholder:
-Insert one in-game screenshot showing the HUD (`Mode`, `Score`, `Time`) and at least one obstacle family on screen.
+Gameplay screenshot placeholder: insert one in-game screenshot showing the HUD (Mode, Score, Time) and at least one obstacle family on screen.
 
----
+<!-- pagebreak -->
 
-## Page 2 - Telemetry and Labels
-
+## 2) Telemetry and labels
 Telemetry source: `data/runs.csv` (one row per run)
 
 | runs.csv column | Meaning |
@@ -53,78 +53,82 @@ Telemetry source: `data/runs.csv` (one row per run)
 | `tap_mean_interval_ms` | Mean interval between taps (ms). |
 | `tap_sd_interval_ms` | Standard deviation of tap intervals (ms). |
 
-Labeling notes:
-- `obstacle_family` is recorded only when the run ends via obstacle collision.
+### Labeling notes
+- `obstacle_family` is recorded only when a run ends via **obstacle collision**.
 - Non-obstacle endings (ground/ceiling/other) may have `obstacle_family` blank.
-- In analysis, missing/blank families are normalized to `none` so every run can be grouped cleanly.
+- In analysis, missing/blank families are normalized to **`none`** so every run can be grouped cleanly.
+- A derived label `death_family` is used for grouping and reporting.
 
-Obstacle family glossary (current buckets):
+### Obstacle family glossary (current buckets)
 Obstacle families are named obstacle patterns used to group failures into interpretable buckets.
+
 - `precision_gap`: tight margins; small control errors get punished.
 - `rhythm_wave`: repeating pattern that rewards consistent timing and cadence.
 - `timing_gate`: discrete timing windows (“commit moments”) where early/late inputs fail.
 - `none`: non-obstacle endings (ground/ceiling/other), i.e. no obstacle family.
 
-Report tables referenced on this page:
+Report tables referenced:
 - `reports/summary_by_family.csv`
 - `reports/death_count_by_family.csv`
 - `reports/mean_survival_by_family_by_mode.csv`
 
----
+<!-- pagebreak -->
 
-## Page 3 - Results by Family
+## 3) Results by family
 
-### Death Count by Family
-
+### Death count by family
 ![Death count by family](docs/figures/death_count_by_family.png)
 
-From `reports/death_count_by_family.csv` (current sample):
-`rhythm_wave` (15), `precision_gap` (10), `timing_gate` (6), `none` (3), total `n=34`.
+In the current snapshot (`reports/death_count_by_family.csv`, total **n=34**):
+- `rhythm_wave`: 15
+- `precision_gap`: 10
+- `timing_gate`: 6
+- `none`: 3
 
-Takeaway:
-Failures are not evenly distributed across families in this sample. This is useful for identifying “where the friction is”, but it is still directional because exposure depends on the spawn policy and the dataset is small.
+**Takeaway:** failures are not evenly distributed across families in this sample. This is useful for identifying “where the friction is,” but it is still directional because exposure depends on the spawn policy and the dataset is small.
 
-### Mean Survival by Family
-
+### Mean survival by family
 ![Mean survival by family](docs/figures/mean_survival_by_family.png)
 
-From `reports/summary_by_family.csv` (current sample):
-Mean survival is `5.308s` (`rhythm_wave`), `5.147s` (`timing_gate`), `3.316s` (`precision_gap`), and `1.158s` (`none`).
+From `reports/summary_by_family.csv` (current snapshot):
+- `rhythm_wave`: 5.308s
+- `timing_gate`: 5.147s
+- `precision_gap`: 3.316s
+- `none`: 1.158s
 
-Interpretation:
+**Interpretation:**
 - `none` (ground/ceiling, no obstacle family) is shortest, consistent with early-run control failures.
 - Family means help rank friction points, but should not be treated as causal without larger, balanced data.
 
----
+<!-- pagebreak -->
 
-## Page 4 - Baseline vs Personalised
-
+## 4) Baseline vs personalised (adaptive)
 ![Mean survival by family by mode](docs/figures/mean_survival_by_family_by_mode.png)
 
-From `reports/mean_survival_by_family_by_mode.csv` (current sample):
-Mode effects differ by family. Example: `timing_gate` is higher in personalised (`5.46s`, n=4) than baseline (`4.52s`, n=2), while `precision_gap` and `rhythm_wave` are slightly higher in baseline in this sample.
+From `reports/mean_survival_by_family_by_mode.csv` (current snapshot), mode effects differ by family. Example:
+- `timing_gate` is higher in personalised (5.46s, n=4) than baseline (4.52s, n=2),
+- while `precision_gap` and `rhythm_wave` are slightly higher in baseline in this sample.
 
-Takeaway:
-This is not enough evidence to claim a stable “winner” because some cells are tiny (e.g., `timing_gate` baseline n=2). The point of this page is transparency: the baseline vs personalised split is measurable and inspectable from raw logs to plots.
+**Takeaway:** this is not enough evidence to claim a stable “winner” because some cells are tiny (e.g., `timing_gate` baseline n=2). The point of this section is transparency: the baseline vs personalised split is measurable and inspectable from raw logs to plots.
 
 ### Limitations (what the current evidence does NOT claim)
-- Small total sample (`n=34`) and uneven counts across family/mode cells.
+- Small total sample (n=34) and uneven counts across family/mode cells.
 - Single-player data in current logs limits generalization.
 - No confidence intervals or significance testing yet.
 - Family exposure is policy-driven, so death counts can reflect selection effects.
 - Session effects (warm-up/fatigue) are not controlled.
 
 ### Next steps (toward reviewer-grade evaluation)
-- Collect balanced data: fixed protocol with the same number of runs per family, in both modes.
-- Add uncertainty: error bars / confidence intervals so differences aren’t just visual.
-- Control learning/fatigue: analyze by session order (early vs late) to separate improvement from policy effects.
-- Show distributions: per-run survival histograms/boxplots, not only means.
-- Lock an evaluation routine: a repeatable “test session” schedule anyone can follow.
+- **Collect balanced data:** fixed protocol with the same number of runs per family, in both modes.
+- **Add uncertainty:** error bars / confidence intervals so differences aren’t just visual.
+- **Control learning/fatigue:** analyze by session order (early vs late) to separate improvement from policy effects.
+- **Show distributions:** per-run survival histograms/boxplots, not only means.
+- **Lock an evaluation routine:** a repeatable “test session” schedule anyone can follow.
 
 ### Conclusion
 Puff+ is a checkpoint-sized but end-to-end system: it shows that obstacle patterns can be labeled into interpretable families, that baseline vs adaptive behavior can be compared transparently, and that results can be reproduced from logged runs into plots. The next iteration is to gather a larger balanced dataset and add uncertainty metrics so any improvement claims are defensible, not just directional.
 
 ### Reproducibility (local)
 ```powershell
-py src/main.py
 py src/analyze_runs.py
+py src/main.py   # optional: generate more runs
