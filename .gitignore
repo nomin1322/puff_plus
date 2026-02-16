@@ -7,3 +7,4 @@ reports/
 data/runs.csv
 data/policy_state.json
 src/*.bak*
+PORTFOLIO.pdf
