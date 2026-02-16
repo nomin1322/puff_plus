@@ -41,3 +41,8 @@ Never access network.
 ## After verify passes
 - Update CONTEXT.md (max 10 lines): milestone, what changed, next bite.
 - Update RUNBOOK.md: exact commands used + any new undo/verify notes.
+### Hard ban (do not propose)
+- Never delete or replace CONTEXT.md or RUNBOOK.md.
+- In-place edits only for CONTEXT.md and RUNBOOK.md.
+- If either file has encoding/format issues, preserve content and rewrite in-place without deleting.
+- If deletion seems necessary for any reason, STOP and ask for instructions.
