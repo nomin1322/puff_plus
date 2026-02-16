@@ -20,7 +20,7 @@ Why it matters: admissions and technical reviewers can inspect concrete telemetr
 
 Gameplay screenshot placeholder: insert one in-game frame showing HUD (`Mode`, `Score`, `Time`) and at least one obstacle family on screen.
 
-\newpage
+---
 
 ## Page 2 - Telemetry and Labels
 
@@ -50,7 +50,7 @@ Report tables referenced on this page:
 - `reports/death_count_by_family.csv`
 - `reports/mean_survival_by_family_by_mode.csv`
 
-\newpage
+---
 
 ## Page 3 - Results by Family
 
@@ -70,7 +70,7 @@ Interpretation is directional because family exposure and run outcomes are affec
 The `none` group (ground/ceiling, no obstacle family) is shortest, which is consistent with early-run control failures.
 Family-level means are useful for ranking friction points, but they should not be treated as causal without larger balanced data.
 
-\newpage
+---
 
 ## Page 4 - Baseline vs Personalised
 
